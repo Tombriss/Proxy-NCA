@@ -25,10 +25,10 @@ if __name__ == '__main__':
     # plot_model(model, 'proxymodel.png')
     # input()
 
-    with open('/home/data1/kiranp/extracted_features/imagenet_xception/data_kmeans_train.pkl', 'rb') as fp:
+    with open(train_path+'/data_kmeans_train.pkl', 'rb') as fp:
         img_data_train = pickle.load(fp)
 
-    with open('/home/data1/kiranp/extracted_features/imagenet/data_kmeans_val.pkl', 'rb') as fp:
+    with open(val_path+'/data_kmeans_val.pkl', 'rb') as fp:
         img_data_val = pickle.load(fp)
         
     classes = list(img_data_train.keys())
@@ -49,39 +49,28 @@ if __name__ == '__main__':
                 i = 0
                 
         
-            groundings = df['0'].values[i:i+BATCH_SIZE]
-            anchor_labels = df['1'].values[i:i+BATCH_SIZE]
-            anchor_indices = df['2'].values[i:i+BATCH_SIZE]
+            anchor_labels = df['0'].values[i:i+BATCH_SIZE]
+            anchor_indices = df['1'].values[i:i+BATCH_SIZE]
             
-
+            
             anchor_img = []
             class_mask = np.zeros((BATCH_SIZE, 576))
             class_mask_bar = np.ones((BATCH_SIZE, 576))
-            anchor_aud = []
-            for s,x in enumerate(groundings):                
+            for s in range(BATCH_SIZE):                
                 label = anchor_labels[s]
                 class_mask[s][label_ind[label]] = 1
                 class_mask_bar[s][label_ind[label]] = 0
-
-                # image anchor
-                if x==0:                    
-                    anchor_img.append(img_data[label][anchor_indices[s]])
-                    anchor_aud.append(np.zeros(AUD_FEAT))
-                   
-                    
-                # audio anchor
-                else:                   
-                    anchor_aud.append(speech_data[label][anchor_indices[s]])
-                    anchor_img.append(np.zeros(2048))
-
+        
+                anchor_img.append(img_data[label][anchor_indices[s]])
+                  
                                
-            yield [groundings, 1-groundings, np.array(anchor_aud), np.array(anchor_img), np.array(class_mask), np.array(class_mask_bar)], np.zeros(BATCH_SIZE)
+            yield [np.array(anchor_img), np.array(class_mask), np.array(class_mask_bar)], np.zeros(BATCH_SIZE)
             
             i += BATCH_SIZE
 
 
 
-    filepath = "/home/data1/anshulg/proxy_loss_deep2_actual_newdata.keras"
+    filepath = "proxy_loss_deep2_actual_newdata.keras"
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True, mode='min', period=1)
     callbacks_list = [checkpoint]
 
@@ -103,7 +92,7 @@ if __name__ == '__main__':
     plt.close()
 
    
-    with open('/home/data1/anshulg/history_proxy_loss_deep2_actual_newdata.json', 'w') as fp:
+    with open('/history_proxy_loss_deep2_actual_newdata.json', 'w') as fp:
         json.dump(history.history, fp)
 
     stop = timeit.default_timer()

@@ -57,8 +57,6 @@ class JointNet():
     
     def joint_model(self):
 
-        grounding = Input((1, ), name='grounding')
-        grounding_bar = Input((1, ), name='grounding_bar')
         anchor_img = Input((2048, ), name='anchor_img')
         class_mask = Input((576, ), name='class_mask')
         class_mask_bar = Input((576, ), name='class_mask_bar')
@@ -74,7 +72,7 @@ class JointNet():
             output_shape=(1, ))
 
         model = Model(
-            input=[grounding, grounding_bar, anchor_img, class_mask, class_mask_bar],
+            input=[anchor_img, class_mask, class_mask_bar],
             output=loss)
         model.compile(loss=self.identity_loss, optimizer=keras.optimizers.Adam(lr=0.01))
 

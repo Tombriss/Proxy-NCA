@@ -24,7 +24,7 @@ class JointNet():
         return K.mean(y_pred)
 
 
-    def bpr_triplet_loss(self, X):
+    def bpr_nca_loss(self, X):
 
         anchor_latent, class_mask, class_mask_bar = X
             
@@ -69,7 +69,7 @@ class JointNet():
 
         loss = merge(
             [anchor_img_latent, class_mask, class_mask_bar],
-            mode=self.bpr_triplet_loss,
+            mode=self.bpr_nca_loss,
             name='loss',
             output_shape=(1, ))
 

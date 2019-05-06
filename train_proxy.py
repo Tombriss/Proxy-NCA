@@ -1,4 +1,4 @@
-from model_proxy3 import JointNet
+from model_proxy import JointNet
 import keras	
 import numpy as np
 from keras.utils import plot_model
@@ -11,50 +11,31 @@ from keras.callbacks import ModelCheckpoint
 import timeit
 import json
 import pandas as pd
-import tensorflow as tf
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
-os.environ['HDF5_USE_FILE_LOCKING']='FALSE'
-# os.environ['OMP_NUM_THREADS']='8'
 
 
 if __name__ == '__main__':
 
     start = timeit.default_timer()
     BATCH_SIZE = 32
-    AUD_FEAT = 2048
+    train_path = ''
+    val_path = ''
 
     jointnet = JointNet()
     model = jointnet.model
-    # model.load_weights('/home/data1/anshulg/triplet_relu_newdata_deep2_orth_drop_newdata.keras', by_name=True)
     # plot_model(model, 'proxymodel.png')
     # input()
-
-
-    with open('/home/data1/anshulg/speech_features_2048D.pkl', 'rb') as fp:
-        speech_data = pickle.load(fp)
-
-    # max_len = speech_data['abacus'].shape[1]
-
 
     with open('/home/data1/kiranp/extracted_features/imagenet_xception/data_kmeans_train.pkl', 'rb') as fp:
         img_data_train = pickle.load(fp)
 
-    # with open('/home/data1/kiranp/extracted_features/imagenet/data_kmeans_val.pkl', 'rb') as fp:
-    #     img_data_val = pickle.load(fp)
+    with open('/home/data1/kiranp/extracted_features/imagenet/data_kmeans_val.pkl', 'rb') as fp:
+        img_data_val = pickle.load(fp)
+        
     classes = list(img_data_train.keys())
     label_ind = {c:i for i,c in enumerate(classes)}
 
-    df_train = pd.read_csv('/home/anshulg/WordNet/get_imagenet/train_data_proxy.csv')
-    df_val = pd.read_csv('/home/anshulg/WordNet/get_imagenet/val_data_proxy.csv')
-
-    
-    # with open('/home/anshulg/WordNet/get_imagenet/proxy_aud.pkl', 'rb') as fp:
-    #     proxy_aud = pickle.load(fp)
-
-    # with open('/home/anshulg/WordNet/get_imagenet/proxy_img.pkl', 'rb') as fp:
-    #     proxy_img = pickle.load(fp)
-
+    df_train = pd.read_csv(train_path+'/train_data_proxy.csv')
+    df_val = pd.read_csv(val_path+'val_data_proxy.csv')
    
 
     def generator(df, img_data):

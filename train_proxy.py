@@ -20,11 +20,6 @@ if __name__ == '__main__':
     train_path = ''
     val_path = ''
 
-    jointnet = JointNet()
-    model = jointnet.model
-    # plot_model(model, 'proxymodel.png')
-    # input()
-
     with open(train_path+'/data_kmeans_train.pkl', 'rb') as fp:
         img_data_train = pickle.load(fp)
 
@@ -32,7 +27,13 @@ if __name__ == '__main__':
         img_data_val = pickle.load(fp)
         
     classes = list(img_data_train.keys())
-    label_ind = {c:i for i,c in enumerate(classes)}
+    label_ind = {c:i for i,c in enumerate(classes)}    
+    
+    ip_size = img_data_train[classes[0]][0].shape[0]
+    jointnet = JointNet(ip_size)
+    model = jointnet.model
+    # plot_model(model, 'proxymodel.png')
+    # input()
 
     df_train = pd.read_csv(train_path+'/train_data_proxy.csv')
     df_val = pd.read_csv(val_path+'val_data_proxy.csv')

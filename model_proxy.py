@@ -9,7 +9,7 @@ import numpy as np
 
 class JointNet():
 
-    def __init__(self):
+    def __init__(self, ip_size):
 
         self.audio_submodel = self.audio_submodel()
         self.audio_submodel.summary()
@@ -17,6 +17,7 @@ class JointNet():
         self.image_submodel.summary()
         self.model = self.joint_model()
         self.model.summary()
+        self.input_size = ip_size
 
 
     def identity_loss(self, y_true, y_pred):
@@ -57,7 +58,7 @@ class JointNet():
     
     def joint_model(self):
 
-        anchor_img = Input((2048, ), name='anchor_img')
+        anchor_img = Input((self.input_size, ), name='anchor_img')
         class_mask = Input((576, ), name='class_mask')
         class_mask_bar = Input((576, ), name='class_mask_bar')
         

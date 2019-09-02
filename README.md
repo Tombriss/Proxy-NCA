@@ -12,7 +12,8 @@
 
 ### Running the Code
 
-#### ``` >>Python train.py```
+#### ``` >> python train.py```
 #### </br>
 
 ### References
+#### Movshovitz-Attias, Y., Toshev, A., Leung, T. K., Ioffe, S., & Singh, S. (2017). No fuss distance metric learning using proxies. In Proceedings of the IEEE International Conference on Computer Vision (pp. 360-368).

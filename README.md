@@ -12,8 +12,9 @@
 
 ### Dataset
 #### Prepare train and validation data in the form of python dictionaries. The dictionary should be of the structure:
-#### dict[class] = {datapoint1, datapoint2 ...} </br></br>
-#### Update batch_size, input_size etc in train.py and model.py
+#### dict[class] = [datapoint0, datapoint1 ...] where datapoint0 is index 0 and so on.
+#### Prepare train and validation csv files. The csv should be of the structure:
+#### (class, index)
 #### </br>
 
 ### Running the Code

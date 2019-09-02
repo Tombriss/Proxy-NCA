@@ -12,7 +12,7 @@
 
 ### Dataset
 #### Prepare train and validation data in the form of python dictionaries. The dictionary should be of the structure:
-#### dict[class] = {datapoint1, datapoint2 ...} </br>
+#### dict[class] = {datapoint1, datapoint2 ...} </br></br>
 #### Update batch_size, input_size etc in train.py and model.py
 #### </br>
 

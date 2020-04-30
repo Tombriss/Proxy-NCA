@@ -1,0 +1,15 @@
+{
+    "is_test": false,
+    "batch_size": 85,
+    "split_factor": 0.66,
+    "max_sample_per_classes": 1000,
+    "min_sample_per_classes": 100,
+    "max_classes": 20,
+    "max_training_sample_per_classes": 10000,
+    "max_validation_sample_per_classes": 10000,
+    "gradient_clipping_by_global_norm": 5.0,
+    "size": [32, 32],
+    "catalog_path": "/Users/thomas/Documents/yoobic/production/SANOFI_IE/dataset/Catalog_IE",
+    "output_dir": "/output/tmp",
+    "model_name": "wrn"
+}

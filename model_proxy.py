@@ -4,21 +4,23 @@ from keras.models import Model, load_model, Sequential
 from keras.layers import Layer, Dense, Input, Dropout, Multiply, Lambda, Add, Flatten, Masking, LSTM, Conv2D, BatchNormalization, Activation, TimeDistributed
 import tensorflow as tf
 import numpy as np
-from tensorflow.python.ops import math_ops
-
-distance = lambda x: (K.sum(K.square(x[0] - x[1]), axis=-1, keepdims=True))
+from wrn import create_wide_residual_network
 
 
 class JointNet():
 
-    def __init__(self, ip_size, nbre_classes):
+    def __init__(self, ip_size, nbre_classes, is_test=True, lr=0.1):
+
+        self.is_test = is_test
 
         self.input_size = ip_size
         self.nbre_classes = nbre_classes
+        self.lr = lr
         self.image_submodel = self._image_submodel()
         self.image_submodel.summary()
         self.model = self.joint_model()
         self.model.summary()
+        self.embedder = self.create_embedder()
 
     def identity_loss(self, y_true, y_pred):
 
@@ -37,21 +39,28 @@ class JointNet():
         # d_neg = K.exp(-distance([proxy_mat(anchor_latent), class_mask_bar]))
 
         # loss = K.log(d_neg / d_pos + 1e-16)
-        vec = 2 * class_mask_bar * proxy_mat(anchor_latent)
+        x = proxy_mat(anchor_latent)
+        exp_ = K.exp(-2 * x)
 
-        ex = K.exp(vec)
+        d_pos = K.sum(exp_ * class_mask)
+        d_neg = K.sum(exp_ * class_mask_bar)
 
-        loss = K.log(K.sum(ex))
+        loss = - K.log(d_pos / d_neg + 1e-16)
 
         return loss
 
     def _image_submodel(self):
 
-        model = Sequential(name='sequential_2')
-        model.add(Conv2D(64, kernel_size=3, activation='relu', input_shape=(self.input_size[0], self.input_size[1], 3,)))
-        model.add(Conv2D(32, kernel_size=3, activation='relu'))
-        model.add(Flatten())
-        model.add(Dense(64, activation='relu', name='dense_img3'))
+        size = (self.input_size[0], self.input_size[1], 3,)
+
+        if self.is_test:
+
+            model = Sequential(name='sequential_2')
+            model.add(Flatten(input_shape=size))
+            model.add(Dense(64, activation='relu'))
+
+        else:
+            model = create_wide_residual_network(size, nb_classes=64, N=4, k=2, dropout=0)
 
         return model
 
@@ -69,11 +78,24 @@ class JointNet():
         model = Model(
             inputs=[anchor_img, class_mask, class_mask_bar],
             outputs=loss)
-        model.compile(loss=self.identity_loss, optimizer=keras.optimizers.Adam(lr=0.001))
+        model.compile(loss=self.identity_loss, optimizer=keras.optimizers.Adam(lr=self.lr))
 
         return model
+
+    def create_embedder(self):
+
+        embedder_input = Input((self.input_size[0], self.input_size[1], 3, ), name='embedder_input')
+        embedding = self.image_submodel(embedder_input)
+
+        embedder = Model(
+            inputs=embedder_input,
+            outputs=embedding)
+
+        embedder.compile(loss=self.identity_loss, optimizer=keras.optimizers.Adam(lr=self.lr))
+
+        return(embedder)
 
 
 if __name__ == '__main__':
 
-    net = JointNet(ip_size=[32, 32], nbre_classes=19)
+    net = JointNet(ip_size=[32, 32], nbre_classes=19, lr=0.1)

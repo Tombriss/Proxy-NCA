@@ -34,7 +34,8 @@ class DataSet(object):
         self.batch_size = config_BO["batch_size"]
         self.split_factor = config_BO["split_factor"]
 
-        self.epochs = 0
+        self.epochs = config_BO["epochs"]
+        self.lr = config_BO["lr"]
         self.curr_train_index = 0
 
         label_map = []

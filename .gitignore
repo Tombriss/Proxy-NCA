@@ -1,4 +1,10 @@
-model
-model_embedder_
-**.json
-**.txt
+*
+!.gitattributes
+!.gitignore
+!readme.md
+!.gitkeep
+!*.py
+!*.json
+!*/
+history_training.json
+.vscode/

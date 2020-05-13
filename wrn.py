@@ -1,11 +1,13 @@
 from keras.models import Model
-from keras.layers import Input, Add, Activation, Dropout, Flatten, Dense
+from keras.layers import Input, Add, Activation, Dropout, Flatten, Dense, Lambda
 from keras.layers.convolutional import Conv2D, MaxPooling2D, AveragePooling2D
 from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
 from keras import backend as K
 
-weight_decay = 0.0005
+# weight_decay = 0.0005
+#weight_decay = 0.001
+# weight_decay = 0.01
 weight_decay = 0
 
 
@@ -132,7 +134,7 @@ def create_wide_residual_network(input_dim, nb_classes=100, N=2, k=1, dropout=0.
     """
     channel_axis = 1 if K.image_data_format() == "channels_first" else -1
 
-    ip = Input(shape=input_dim)
+    ip = Input(shape=input_dim, name="first_layer")
 
     x = initial_conv(ip)
     nb_conv = 4
@@ -170,9 +172,15 @@ def create_wide_residual_network(input_dim, nb_classes=100, N=2, k=1, dropout=0.
     x = AveragePooling2D((8, 8))(x)
     x = Flatten()(x)
 
-    x = Dense(nb_classes, kernel_regularizer=l2(weight_decay), activation='softmax')(x)
+    x = Dense(256, activation='relu', kernel_regularizer=l2(weight_decay))(x)
 
-    model = Model(ip, x)
+    regularise = lambda x: x / 10
+    x = Lambda(regularise)(x)
+    x = Dense(nb_classes, activation='tanh')(x)
+    normalize = lambda x: x / (nb_classes**0.5)
+    x = Lambda(normalize, name='last_layer')(x)
+
+    model = Model(ip, x, name='embedder')
 
     if verbose:
         print("Wide Residual Network-%d-%d created." % (nb_conv, k))

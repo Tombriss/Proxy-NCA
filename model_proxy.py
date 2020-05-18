@@ -17,6 +17,7 @@ from sklearn.decomposition import PCA
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+from sklearn.metrics import precision_recall_curve
 
 os.environ['PYTHONHASHSEED'] = str(1)
 np.random.seed(1)
@@ -74,11 +75,11 @@ class JointNet():
         loss_conf_pos = -c * tf.math.log(max_proba + 1e-6) - (1 - c) * tf.math.log(1 - max_proba + 1e-6)
         loss_pos_neg = -c * tf.math.log(proba_pos + 1e-6) - (1 - c) * tf.math.log(1 - proba_pos + 1e-6)
 
-        loss_classification = tf.math.log(1 + (d_neg + 1e-16) / (d_pos + 1e-16))
+        loss_classification = tf.math.log(1e-6 + (d_neg + 1e-16) / (d_pos + 1e-16))
 
-        loss = loss_classification * c + 0.005 * loss_confidence + 0.005 * loss_conf_pos + 0.001 * loss_pos_neg
+        loss = 1 + loss_classification * c + 0.01 * loss_confidence + 0.01 * loss_conf_pos + 0.01 * loss_pos_neg
 
-        return loss
+        return 1 + loss_classification * c
 
     def _image_submodel(self):
 
@@ -117,8 +118,6 @@ class JointNet():
         class_mask = Input((self.nbre_classes, ), name='class_mask')
         class_mask_bar = Input((self.nbre_classes, ), name='class_mask_bar')
 
-        # id_tens = lambda x: K.constant(np.identity(self.nbre_classes, dtype=np.float32))
-        # id_mat = Lambda(id_tens)()
         id_mat = Input((self.nbre_classes, self.nbre_classes, ), name='identity_matrix')
 
         proxy_mat = Dense(self.embedding_size, input_shape=(self.nbre_classes, self.nbre_classes),
@@ -194,16 +193,11 @@ class JointNet():
         if self.proxy_mat is None:
             self.load_weights()
 
-        if mode != 'enhanced':
-
-            proxy_mat = self.get_proxy_mat()
-            y = list(range(self.nbre_classes))
-            knn = KNeighborsClassifier(n_neighbors=1).fit(proxy_mat, y)
-            return(knn)
-
         generator = data_loader.generator(mode='train', augment=False)
         num_steps = data_loader.num_steps(mode='train')
         list_X, list_y = [], []
+
+        proxy_mat = self.get_proxy_mat()
 
         for _ in range(num_steps):
             batch = next(generator)
@@ -213,20 +207,40 @@ class JointNet():
         X = np.concatenate(list_X)
         y = np.concatenate(list_y)
 
-        proxy_mat = self.get_proxy_mat()
+        if mode == 'enhanced':
 
-        X_tot = np.concatenate([X, proxy_mat])
-        y_tot = np.concatenate([y, np.identity(self.nbre_classes)])
-        y_tot = np.array([(np.where(r == 1)[0][0] + 1 if len(np.where(r == 1)[0]) == 1 else 0) for r in y_tot])
+            n_neighbors = 6
+            X_tot = np.concatenate([X, proxy_mat])
+            y_tot = np.concatenate([y, np.identity(self.nbre_classes)])
+            y_tot = np.array([(np.where(r == 1)[0][0] + 1 if len(np.where(r == 1)[0]) == 1 else 0) for r in y_tot])
 
-        knn = KNeighborsClassifier(n_neighbors=5).fit(X_tot, y_tot)
+        elif mode == 'honest':
+
+            n_neighbors = 6
+            X_tot = np.concatenate([X, proxy_mat])
+            y_tot = np.concatenate([y, np.identity(self.nbre_classes)])
+
+            y_tot = np.array([(np.where(r == 1)[0][0] + 1 if len(np.where(r == 1)[0]) == 1 else 0) for r in y_tot])
+
+            X_tot = X_tot[y_tot != 0]
+            y_tot = y_tot[y_tot != 0]
+
+            X_tot = np.concatenate([X_tot, np.zeros((6, self.embedding_size))])
+            y_tot = np.concatenate([y_tot, np.zeros((6,))])
+
+        else:
+            n_neighbors = 1
+            X_tot = np.concatenate([np.zeros((1, self.embedding_size)), proxy_mat])
+            y_tot = np.array(list(range(self.nbre_classes + 1)))
+
+        knn = KNeighborsClassifier(n_neighbors=n_neighbors).fit(X_tot, y_tot)
 
         X_pos = X_tot[y_tot != 0]
         y_pos = y_tot[y_tot != 0]
 
-        knn_pos = KNeighborsClassifier(n_neighbors=5).fit(X_pos, y_pos)
+        knn_pos = KNeighborsClassifier(n_neighbors=n_neighbors).fit(X_pos, y_pos)
 
-        knn_neg = KNeighborsClassifier(n_neighbors=5).fit(X_tot, np.array([(0 if i == 0 else 1)for i in y_tot]))
+        knn_neg = KNeighborsClassifier(n_neighbors=n_neighbors).fit(X_tot, np.array([(0 if i == 0 else 1)for i in y_tot]))
 
         return(knn, knn_pos, knn_neg)
 
@@ -242,7 +256,7 @@ class JointNet():
 
         return(knn_predictions)
 
-    def _evaluate_batch(self, X, labels, knn, name='', data_loader=None, plot=False, hist=True):
+    def _evaluate_batch(self, X, labels, knn, name='', data_loader=None, plot=False, hist=True, rec_prec_curves=False):
 
         if self.proxy_mat is None:
             self.load_weights()
@@ -273,23 +287,23 @@ class JointNet():
             )
             plt.savefig("tsne_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
+        proxy_mat = self.get_proxy_mat()
+        probs = []
+        sums = []
+        for z in X:
+            max_proba_z = None
+            sum_z = 0
+            for p in proxy_mat:
+                proba_z_p = (1 + np.sum(p * z, axis=0) / np.linalg.norm(z)) / 2
+                if max_proba_z is None or proba_z_p > max_proba_z:
+                    max_proba_z = proba_z_p
+                sum_z += proba_z_p
+            sums.append(sum_z / self.nbre_classes)
+            probs.append(max_proba_z)
+
+        probs = np.array(probs)
+
         if hist:
-
-            proxy_mat = self.get_proxy_mat()
-            probs = []
-            sums = []
-            for z in X:
-                max_proba_z = None
-                sum_z = 0
-                for p in proxy_mat:
-                    proba_z_p = (1 + np.sum(p * z, axis=0) / np.linalg.norm(z)) / 2
-                    if max_proba_z is None or proba_z_p > max_proba_z:
-                        max_proba_z = proba_z_p
-                    sum_z += proba_z_p
-                sums.append(sum_z / self.nbre_classes)
-                probs.append(max_proba_z)
-
-            probs = np.array(probs)
 
             p_neg = probs[labels == 0]
             p_pos = probs[labels != 0]
@@ -322,6 +336,51 @@ class JointNet():
             plt.hist(prod_pos, bins, alpha=0.5, label='prods of pos', density=True)
             plt.legend(loc='upper right')
             plt.savefig("hist_prods_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+
+        if name == 'val' and rec_prec_curves:
+
+            norms = np.sum(np.abs(X)**2, axis=-1)**(1. / 2)
+            plt.figure()
+            precision1, recall1, thresholds1 = precision_recall_curve(labels, norms)
+            f11 = 2 / (1 / np.array(precision1[:-1]) + 1 / np.array(recall1[:-1]))
+            plt.plot(thresholds1, precision1[:-1], 'b', label='precision')
+            plt.plot(thresholds1, recall1[:-1], 'g', label='recall')
+            plt.plot(thresholds1, f11, 'r', label='f1')
+            plt.legend(loc='lower left')
+            plt.savefig("pre_rec_norms_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+
+            plt.figure()
+            precision2, recall2, thresholds2 = precision_recall_curve(labels, probs)
+            f12 = 2 / (1 / np.array(precision2[:-1]) + 1 / np.array(recall2[:-1]))
+            plt.plot(thresholds2, precision2[:-1], 'b', label='precision')
+            plt.plot(thresholds2, recall2[:-1], 'g', label='recall')
+            plt.plot(thresholds2, f12, 'r', label='f1')
+            plt.legend(loc='lower left')
+            plt.savefig("pre_rec_probs_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+
+            prods = norms * probs
+
+            plt.figure()
+            precision3, recall3, thresholds3 = precision_recall_curve(labels, prods)
+            f13 = 2 / (1 / np.array(precision3[:-1]) + 1 / np.array(recall3[:-1]))
+            plt.plot(thresholds3, precision3[:-1], 'b', label='precision')
+            plt.plot(thresholds3, recall3[:-1], 'g', label='recall')
+            plt.plot(thresholds3, f13, 'r', label='f1')
+            plt.legend(loc='lower left')
+            plt.savefig("pre_rec_prods_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+
+            plt.figure()
+            plt.plot(thresholds1, precision1[:-1], 'b', label='precision norms', linestyle='solid')
+            plt.plot(thresholds1, recall1[:-1], 'g', label='recall norms', linestyle='solid')
+            plt.plot(thresholds1, f11, 'r', label='f1 norms', linestyle='solid')
+            plt.plot(thresholds2, precision2[:-1], 'b', label='precision probs', linestyle='dashed')
+            plt.plot(thresholds2, recall2[:-1], 'g', label='recall probs', linestyle='dashed')
+            plt.plot(thresholds2, f12, 'r', label='f1 probs', linestyle='dashed')
+            plt.plot(thresholds3, precision3[:-1], 'b', label='precision prods', linestyle='dotted')
+            plt.plot(thresholds3, recall3[:-1], 'g', label='recall prods', linestyle='dotted')
+            plt.plot(thresholds3, f13, 'r', label='f1', linestyle='dotted')
+            plt.legend(loc='lower left')
+            plt.savefig("pre_rec_all_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
         # cm = confusion_matrix(labels, knn_predictions)
         ac = accuracy_score(labels, knn_predictions)
@@ -367,7 +426,7 @@ class JointNet():
             print("  f1 score : {0:5.2f}%".format(f1 * 100))
 
             ac, ba, f1 = self._evaluate_batch(X, np.array([(0 if i == 0 else 1)for i in y]), knn_neg, name=mode,
-                                              data_loader=data_loader, plot=False, hist=False)
+                                              data_loader=data_loader, plot=False, hist=False, rec_prec_curves=True)
 
             print('\n negatives vs positives:')
             print('  (for a total of {} negatives and {} positives)'.format(len(y[y == 0]), len(y[y != 0])))

@@ -310,19 +310,42 @@ class DataSet(object):
 
         n = len(label_map) // 2
         train_neg_lbl = list(range(0, n))
+        print('number of negative classes in test set:', n)
         test_neg_lbl = list(range(n, len(label_map)))
 
-        negs = {}
+        max_length_class = self.n_neg_train // n
+        train_images = []
+        val_images = []
+        n_to_add = self.n_neg_train % n
+        for lbl in train_neg_lbl:
+            length_class = min(max_length_class + n_to_add, len(dataset_per_label[lbl]))
+            n_to_add = max_length_class + n_to_add - length_class
+            train_images += dataset_per_label[lbl][:length_class]
+        for lbl in train_neg_lbl:
+            for im in dataset_per_label[lbl][::-1]:
+                if n_to_add == 0:
+                    break
+                if im in train_images:
+                    break
+                else:
+                    train_images.append(im)
+                    n_to_add -= 1
+        n_to_add = self.n_neg_train % n
+        max_length_class = self.n_neg_test // n
+        for lbl in test_neg_lbl:
+            length_class = min(max_length_class + n_to_add, len(dataset_per_label[lbl]))
+            n_to_add = max_length_class + n_to_add - length_class
+            val_images += dataset_per_label[lbl][:length_class]
 
-        train_images = [image for label in train_neg_lbl for image in dataset_per_label[label]]
-        val_images = [image for label in test_neg_lbl for image in dataset_per_label[label]]
+        pprint.pprint({label_map[lbl]: len(dataset_per_label[lbl]) for lbl in train_neg_lbl})
+        pprint.pprint({label_map[lbl]: len(dataset_per_label[lbl]) for lbl in test_neg_lbl})
 
         np.random.shuffle(train_images)
         np.random.shuffle(val_images)
 
         self.n_neg_train = min(len(train_images), self.n_neg_train)
         self.n_neg_test = min(len(val_images), self.n_neg_test)
-
+        negs = {}
         negs['train'] = train_images[:self.n_neg_train]
         negs['val'] = val_images[:self.n_neg_test]
 
@@ -409,4 +432,3 @@ class DataSet(object):
 if __name__ == '__main__':
 
     data_loader = DataSet()
-    generator = data_loader.generator()

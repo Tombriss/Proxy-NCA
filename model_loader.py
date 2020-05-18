@@ -20,7 +20,7 @@ if __name__ == '__main__':
                         lr=data_loader.lr, is_test=data_loader.is_test, embedding_size=data_loader.embedding_size)
 
     jointnet.load_weights('model.h5')
-    jointnet.evaluate(data_loader, knn_mode='enhanced', plot=True)
+    jointnet.evaluate(data_loader, knn_mode='honest', plot=False)
 
     # proxy_mat = jointnet.get_proxy_mat()
     # print(proxy_mat)

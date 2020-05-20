@@ -107,7 +107,7 @@ num_steps_train = data_loader.num_steps(mode='train')
 val_generator = data_loader.generator(mode='val')
 num_steps_val = data_loader.num_steps(mode='val')
 
-filepath = "model.h5"
+filepath = wrd + "model.h5"
 checkpoint = ModelCheckpoint(filepath, monitor='val_loss', save_weights_only=True,
                              verbose=1, save_best_only=True, mode='min', period=data_loader.validation_freq)
 plot_losses = PlotLosses()

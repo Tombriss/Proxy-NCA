@@ -22,6 +22,7 @@ np.random.seed(1)
 tf.compat.v1.set_random_seed(1)
 
 data_loader = DataSet()
+wrd = data_loader.out_dir
 
 jointnet = JointNet(ip_size=data_loader.size, nbre_classes=data_loader.num_classes,
                     lr=data_loader.lr, is_test=data_loader.is_test, embedding_size=data_loader.embedding_size)
@@ -61,7 +62,7 @@ class PlotLosses(keras.callbacks.Callback):
         plt.plot(self.x, self.losses, label="loss")
         plt.plot(self.x, self.val_losses, label="val_loss")
         plt.legend()
-        plt.savefig("learning_curves.png", bbox_inches='tight', pad_inches=0)
+        plt.savefig(wrd + "learning_curves.png", bbox_inches='tight', pad_inches=0)
         plt.close()
 
 
@@ -88,43 +89,41 @@ class StepDecay():
         return float(alpha)
 
 
-if __name__ == '__main__':
+os.environ['PYTHONHASHSEED'] = str(1)
+np.random.seed(1)
+tf.compat.v1.set_random_seed(1)
 
-    os.environ['PYTHONHASHSEED'] = str(1)
-    np.random.seed(1)
-    tf.compat.v1.set_random_seed(1)
+session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
+K.set_session(sess)
 
-    session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-    sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
-    K.set_session(sess)
+start = timeit.default_timer()
 
-    start = timeit.default_timer()
+model = jointnet.model
 
-    model = jointnet.model
+train_generator = data_loader.generator(mode='train')
+num_steps_train = data_loader.num_steps(mode='train')
 
-    train_generator = data_loader.generator(mode='train')
-    num_steps_train = data_loader.num_steps(mode='train')
+val_generator = data_loader.generator(mode='val')
+num_steps_val = data_loader.num_steps(mode='val')
 
-    val_generator = data_loader.generator(mode='val')
-    num_steps_val = data_loader.num_steps(mode='val')
+filepath = "model.h5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_loss', save_weights_only=True,
+                             verbose=1, save_best_only=True, mode='min', period=data_loader.validation_freq)
+plot_losses = PlotLosses()
 
-    filepath = "model.h5"
-    checkpoint = ModelCheckpoint(filepath, monitor='val_loss', save_weights_only=True,
-                                 verbose=1, save_best_only=True, mode='min', period=data_loader.validation_freq)
-    plot_losses = PlotLosses()
+schedule = StepDecay(initAlpha=data_loader.lr, factor=0.60, dropEvery=100)
+callbacks_list = [checkpoint, plot_losses, LearningRateScheduler(schedule)]
 
-    schedule = StepDecay(initAlpha=data_loader.lr, factor=0.60, dropEvery=100)
-    callbacks_list = [checkpoint, plot_losses, LearningRateScheduler(schedule)]
+# for i in range(num_steps_train):
 
-    # for i in range(num_steps_train):
+#     data = next(train_generator)[0]
+#     print('batch :')
+#     print(data[0].shape, data[1].shape, data[2].shape, data[3].shape)
 
-    #     data = next(train_generator)[0]
-    #     print('batch :')
-    #     print(data[0].shape, data[1].shape, data[2].shape, data[3].shape)
+history = model.fit_generator(train_generator, steps_per_epoch=num_steps_train, epochs=data_loader.epochs,
+                              callbacks=callbacks_list, validation_data=val_generator, validation_steps=num_steps_val, validation_freq=data_loader.validation_freq)
 
-    history = model.fit_generator(train_generator, steps_per_epoch=num_steps_train, epochs=data_loader.epochs,
-                                  callbacks=callbacks_list, validation_data=val_generator, validation_steps=num_steps_val, validation_freq=data_loader.validation_freq)
-
-    stop = timeit.default_timer()
-    with open('time.txt', 'w') as f:
-        f.write(str(stop - start))
+stop = timeit.default_timer()
+with open(wrd + 'time.txt', 'w') as f:
+    f.write(str(stop - start))

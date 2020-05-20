@@ -14,9 +14,9 @@
     "n_neg_train": 505,
     "n_neg_test": 10000,
     "gradient_clipping_by_global_norm": 5.0,
-    "size": [32, 32],
+    "size": [128, 128],
     "catalog_path": "/Users/thomas/Documents/yoobic/production/sanofi_greece",
     "negative_path": "/Users/thomas/Documents/yoobic/production/sanofi_at_minus_sanofi_greece",
-    "output_dir": "/output/tmp",
+    "output_dir": "",
     "model_name": "wrn"
 }

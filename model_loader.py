@@ -16,8 +16,9 @@ tf.compat.v1.set_random_seed(1)
 if __name__ == '__main__':
 
     data_loader = DataSet()
+    wrd = data_loader.out_dir
     jointnet = JointNet(ip_size=data_loader.size, nbre_classes=data_loader.num_classes,
-                        lr=data_loader.lr, is_test=data_loader.is_test, embedding_size=data_loader.embedding_size)
+                        lr=data_loader.lr, is_test=data_loader.is_test, embedding_size=data_loader.embedding_size, wrd=wrd)
 
     jointnet.load_weights('model.h5')
     jointnet.evaluate(data_loader, knn_mode='honest', plot=False)

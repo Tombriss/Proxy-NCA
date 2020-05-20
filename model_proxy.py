@@ -1,7 +1,7 @@
 import keras
 import keras.backend as K
 from keras.models import Model, load_model, Sequential
-from keras.layers import Layer, Dense, Input, Dropout, Multiply, Lambda, Add, SpatialDropout2D, Flatten, Masking, LSTM, Conv2D, BatchNormalization, Activation, TimeDistributed
+from keras.layers import Layer, Dense, Input, Dropout, Multiply, Lambda, Add, AveragePooling2D, SpatialDropout2D, Flatten, Masking, LSTM, Conv2D, BatchNormalization, Activation, TimeDistributed
 from keras.regularizers import l2
 import tensorflow as tf
 import numpy as np
@@ -12,7 +12,7 @@ from sklearn.metrics import confusion_matrix, balanced_accuracy_score, average_p
 from keras.constraints import UnitNorm
 import os
 from sklearn.manifold import TSNE
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import OPTICS
 from sklearn.decomposition import PCA
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -31,7 +31,7 @@ def distance(x, y):
 
 class JointNet():
 
-    def __init__(self, ip_size, nbre_classes, is_test=False, lr=0.1, embedding_size=64):
+    def __init__(self, ip_size, nbre_classes, is_test=False, lr=0.1, embedding_size=64, wrd=''):
 
         self.is_test = is_test
         self.embedding_size = embedding_size
@@ -44,6 +44,7 @@ class JointNet():
         self.model.summary()
         self.embedder = None
         self.proxy_mat = None
+        self.wrd = wrd
 
     def identity_loss(self, y_true, y_pred):
 
@@ -79,7 +80,7 @@ class JointNet():
 
         loss = 1 + loss_classification * c + 0.01 * loss_confidence + 0.01 * loss_conf_pos + 0.01 * loss_pos_neg
 
-        return 1 + loss_classification * c
+        return loss
 
     def _image_submodel(self):
 
@@ -89,13 +90,15 @@ class JointNet():
 
             p = 0
             reg = l2(0)
+            n_size = 4
 
             inp = Input(size, name='first_layer')
-            x = Conv2D(32, 3, padding="same", activation="relu", strides=2, input_shape=size, kernel_regularizer=reg)(inp)
-            x = SpatialDropout2D(p)(x)
-            x = Conv2D(64, 3, padding="same", activation="relu", strides=2, kernel_regularizer=reg)(x)
-            x = SpatialDropout2D(p)(x)
-            x = Conv2D(128, 3, padding="same", activation="relu", strides=2, kernel_regularizer=reg)(x)
+            x = inp
+            for i in range(n_size):
+                x = Conv2D(32 * (2 ** i), 3, padding="same", activation="relu", strides=2, kernel_regularizer=reg)(x)
+                x = SpatialDropout2D(p)(x)
+                if i > 1:
+                    x = AveragePooling2D()(x)
             x = Flatten()(x)
             x = Dropout(p)(x)
             x = Dense(256, activation=None, kernel_regularizer=reg)(x)
@@ -136,9 +139,9 @@ class JointNet():
 
         return model
 
-    def load_weights(self, path='model.h5'):
+    def load_weights(self, file='model.h5'):
 
-        self.model.load_weights(path)
+        self.model.load_weights(self.wrd + file)
 
         embedder_input = self.model.get_layer('embedder').get_layer('first_layer').output
         embedder_output = self.model.get_layer('embedder').get_layer('last_layer').output
@@ -269,23 +272,36 @@ class JointNet():
 
             tsne = TSNE(n_components=2, verbose=1, n_jobs=-1)
             tsne_results = tsne.fit_transform(X)
+            clusters = OPTICS(min_samples=15).fit_predict(X)
 
             # 'centrum_women':30,'centrum_women':55
 
-            df = pd.DataFrame({'tsne-2d-one': tsne_results[:, 0], 'tsne-2d-two': tsne_results[:, 1], 'y': labels})
+            df = pd.DataFrame({'tsne-2d-one': tsne_results[:, 0],
+                               'tsne-2d-two': tsne_results[:, 1], 'y': labels, 'clusters': clusters})
             df['label'] = df['y'].map(data_loader.label_map)
             df_subset = df[df['y'].isin([0, 43, 31, 56, 41, 48])]  # set_lbl[:n_classes_plot - 4]
+            # df_subset = df[df['y'].isin([0])]
+            l_clusters = list(set(df_subset['clusters']))
+            markers = list(range(len(l_clusters)))
+            cluster_to_marker = dict(zip(l_clusters, markers))
+            df_subset['mark_clust'] = df_subset['clusters'].map(cluster_to_marker)
+
+            n_classes_plot = len(df_subset['mark_clust'].unique())
+
+            filled_markers = ('o', 'v', '^', '<', '>', '8', 's', 'p', '*', 'h', 'H', 'D', 'd', 'P', 'X')
 
             plt.figure(figsize=(16, 10))
             sns.scatterplot(
                 x="tsne-2d-one", y="tsne-2d-two",
-                hue="label",
-                # palette=sns.color_palette("hls", n_classes_plot),
+                hue="mark_clust",
+                palette=sns.color_palette("hls", n_classes_plot),
                 data=df_subset,
+                style='label',
+                markers=filled_markers,
                 legend="full",
                 alpha=0.3
             )
-            plt.savefig("tsne_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "tsne_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
         proxy_mat = self.get_proxy_mat()
         probs = []
@@ -321,21 +337,21 @@ class JointNet():
             plt.hist(h_neg, bins, alpha=0.5, label='norms of negs', density=True)
             plt.hist(h_pos, bins, alpha=0.5, label='norms of pos', density=True)
             plt.legend(loc='upper right')
-            plt.savefig("hist_norms_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "hist_norms_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
             plt.figure()
 
             plt.hist(p_neg, bins, alpha=0.5, label='probs of negs', density=True)
             plt.hist(p_pos, bins, alpha=0.5, label='probs of pos', density=True)
             plt.legend(loc='upper right')
-            plt.savefig("hist_probs_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "hist_probs_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
             plt.figure()
 
             plt.hist(prod_neg, bins, alpha=0.5, label='prods of negs', density=True)
             plt.hist(prod_pos, bins, alpha=0.5, label='prods of pos', density=True)
             plt.legend(loc='upper right')
-            plt.savefig("hist_prods_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "hist_prods_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
         if name == 'val' and rec_prec_curves:
 
@@ -347,7 +363,7 @@ class JointNet():
             plt.plot(thresholds1, recall1[:-1], 'g', label='recall')
             plt.plot(thresholds1, f11, 'r', label='f1')
             plt.legend(loc='lower left')
-            plt.savefig("pre_rec_norms_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "pre_rec_norms_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
             plt.figure()
             precision2, recall2, thresholds2 = precision_recall_curve(labels, probs)
@@ -356,7 +372,7 @@ class JointNet():
             plt.plot(thresholds2, recall2[:-1], 'g', label='recall')
             plt.plot(thresholds2, f12, 'r', label='f1')
             plt.legend(loc='lower left')
-            plt.savefig("pre_rec_probs_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "pre_rec_probs_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
             prods = norms * probs
 
@@ -367,7 +383,7 @@ class JointNet():
             plt.plot(thresholds3, recall3[:-1], 'g', label='recall')
             plt.plot(thresholds3, f13, 'r', label='f1')
             plt.legend(loc='lower left')
-            plt.savefig("pre_rec_prods_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "pre_rec_prods_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
             plt.figure()
             plt.plot(thresholds1, precision1[:-1], 'b', label='precision norms', linestyle='solid')
@@ -380,7 +396,7 @@ class JointNet():
             plt.plot(thresholds3, recall3[:-1], 'g', label='recall prods', linestyle='dotted')
             plt.plot(thresholds3, f13, 'r', label='f1', linestyle='dotted')
             plt.legend(loc='lower left')
-            plt.savefig("pre_rec_all_{}.png".format(name), bbox_inches='tight', pad_inches=0)
+            plt.savefig(self.wrd + "pre_rec_all_{}.png".format(name), bbox_inches='tight', pad_inches=0)
 
         # cm = confusion_matrix(labels, knn_predictions)
         ac = accuracy_score(labels, knn_predictions)
@@ -440,5 +456,5 @@ class JointNet():
 
 if __name__ == '__main__':
 
-    net = JointNet(ip_size=[32, 32], nbre_classes=19, lr=0.1)
-    net.run_test()
+    net = JointNet(ip_size=[128, 128], nbre_classes=64, lr=0.1, is_test=True)
+    # net.run_test()

@@ -53,6 +53,8 @@ class DataSet(object):
         self.n_neg_train = config_BO["n_neg_train"]
         self.n_neg_test = config_BO["n_neg_test"]
 
+        self.out_dir = config_BO["output_dir"]
+
         self.curr_train_index = 0
 
         label_map = []
